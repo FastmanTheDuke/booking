@@ -1,229 +1,349 @@
 <?php
 require_once (dirname(__FILE__). '/../../classes/BookerAuth.php');
+require_once (dirname(__FILE__). '/../../classes/Booker.php');
+
 class AdminBookerAuthController extends ModuleAdminControllerCore
 {
     protected $_module = NULL;
-	public $controller_type='admin';   
-    protected $position_identifier = 'id_auth'; //this filed is required if you use position for sorting
+    public $controller_type='admin';   
+    protected $position_identifier = 'id_auth';
 
     public function __construct()
     {
-		$this->display = 'options';
+        $this->display = 'options';
         $this->context = Context::getContext();
-		$this->bootstrap = true;
+        $this->bootstrap = true;
         $this->table = 'booker_auth';
         $this->identifier = 'id_auth';
         $this->className = 'BookerAuth';
-        $this->_defaultOrderBy = 'id_auth';
-		$this->allow_export = true;
-        //$this->addRowAction('edit');
-        //$this->addRowAction('delete');
-       // Shop::addTableAssociation($this->table, array('type' => 'shop'));
-		
+        $this->_defaultOrderBy = 'date_from';
+        $this->_defaultOrderWay = 'DESC';
+        $this->allow_export = true;
+        
         $this->fields_list = array(
-            'id_auth' => array('title' => ('ID Auth'), 'filter_key' => 'a!id_auth', 'align' => 'center','remove_onclick' => true),       
-            'id_booker' => array('title' => ('ID Booker'), 'filter_key' => 'a!id_booker', 'align' => 'center','remove_onclick' => true),
-            'date_from' => array('title' => ('From'), 'filter_key' => 'a!date_from', 'align' => 'center','remove_onclick' => true),
-            'date_to' => array('title' => ('To'), 'filter_key' => 'a!date_to', 'align' => 'center','remove_onclick' => true),			
-            'active' => array('title' => ('Displayed'), 'align' => 'center', 'active' => 'status', 'type' => 'bool', 'orderby' => FALSE,'remove_onclick' => true),
+            'id_auth' => array(
+                'title' => 'ID', 
+                'filter_key' => 'a!id_auth', 
+                'align' => 'center',
+                'class' => 'fixed-width-xs',
+                'remove_onclick' => true
+            ),       
+            'booker_name' => array(
+                'title' => 'Booker', 
+                'filter_key' => 'b!name',
+                'remove_onclick' => true
+            ),
+            'date_from' => array(
+                'title' => 'Date début', 
+                'filter_key' => 'a!date_from', 
+                'align' => 'center',
+                'type' => 'datetime',
+                'remove_onclick' => true
+            ),
+            'date_to' => array(
+                'title' => 'Date fin', 
+                'filter_key' => 'a!date_to', 
+                'align' => 'center',
+                'type' => 'datetime',
+                'remove_onclick' => true
+            ),
+            'date_add' => array(
+                'title' => 'Date création', 
+                'filter_key' => 'a!date_add', 
+                'align' => 'center',
+                'type' => 'datetime',
+                'remove_onclick' => true
+            ),			
+            'active' => array(
+                'title' => 'Actif', 
+                'align' => 'center', 
+                'active' => 'status', 
+                'type' => 'bool', 
+                'orderby' => false,
+                'remove_onclick' => true
+            ),
         );
-		$this->bulk_actions = array('delete' => array('text' => 'Delete selected',
-                    'confirm' => 'Delete selected items?'));
-					
+        
+        $this->bulk_actions = array(
+            'delete' => array(
+                'text' => 'Supprimer sélectionnés',
+                'confirm' => 'Supprimer les éléments sélectionnés ?',
+                'icon' => 'icon-trash'
+            ),
+            'enable' => array(
+                'text' => 'Activer sélectionnés',
+                'icon' => 'icon-power-off'
+            ),
+            'disable' => array(
+                'text' => 'Désactiver sélectionnés',
+                'icon' => 'icon-power-off'
+            )
+        );
         
         $this->has_bulk_actions = true;
         $this->shopLinkType = '';
-        $this->no_link = false;       // Content line is clickable if false
-        $this->simple_header = false; // false = search header, true = not header. No filters, no paginations and no sorting.
-        $this->actions = array('edit', 'delete');
-		$this->list_no_link = true;
-		//$this->initToolbar();
-		//$this->processFilter();
-		//$this->tpl_list_vars['ajaxUrl'] = $this->context->link->getModuleLink($this->module->name,'display', array('ajax'=>true));		
-		
-		//echo $this->context->link->getAdminLink('AdminController');
-		//echo $this->context->link->getAdminLink('AdminFaq');
-		//$this->setTemplate('module:'.$this->module->name.'/views/templates/front/display.tpl');
+        $this->no_link = false;
+        $this->simple_header = false;
+        $this->actions = array('edit', 'delete', 'view');
+        $this->list_no_link = false;
+        
+        // Jointure pour récupérer le nom du booker
+        $this->_join = 'LEFT JOIN `' . _DB_PREFIX_ . 'booker` b ON (a.id_booker = b.id_booker)';
+        $this->_select = 'b.name as booker_name';
+        
         parent::__construct();
     }
-	public function editableField($manual_position){
-		//echo $manual_position;
-		$this->context->smarty->assign('manual_position', $manual_position);  
-		//return $this->module->setTemplate('module:quizz/views/templates/admin/editable_field.tpl')->fetch();
-		return $this->context->smarty->fetch($this->getTemplatePath().'editable_field.tpl');
-	}
-	public function editableCombinationPriceMethod($value, $question)
+    
+    /**
+     * Récupérer la liste des bookers disponibles
+     */
+    private function getBookerOptions()
     {
-		$this->context->smarty->assign('value', $value);  
-		$this->context->smarty->assign('id', (int)$question['id_auth']);
-		return $this->context->smarty->fetch($this->getTemplatePath().'editable_field.tpl');
-    }	
-	public function renderList()
-	{
-		//https://www.prestashop.com/forums/topic/1063433-param%C3%A8tre-champs-en-fonction-dun-autre-dans-admin-controller-module/
-		$list = parent::renderList();	
-		$this->context->smarty->assign(
-		array(		  
-		  'ajaxUrl' => $this->context->link->getAdminLink('AdminBookerAuth')
-		));
-		$content = $this->context->smarty->fetch($this->getTemplatePath().'ajax.tpl');
-		return $list . $content;
-	}
+        $bookers = Db::getInstance()->executeS('
+            SELECT b.id_booker, b.name
+            FROM `' . _DB_PREFIX_ . 'booker` b
+            WHERE b.active = 1
+            ORDER BY b.name ASC
+        ');
+        
+        $options = array();
+        if ($bookers) {
+            foreach ($bookers as $booker) {
+                $options[] = array(
+                    'id_booker' => $booker['id_booker'],
+                    'name' => $booker['name']
+                );
+            }
+        }
+        
+        return $options;
+    }
+    
     public function renderForm()
     {
         $this->display = 'edit';
         $this->initToolbar();
-		
-        $this->fields_form = [       
-            //'tinymce' => true,
-			//'legend' => "test",
-			//'title' => $this->l('FAQ list'),
-			//'icon' => 'icon-tags',
-			'legend' => [
-                'title' => $this->module->l('Edit Booker Auth'),
-                'icon' => 'icon-cog'
-            ],
-            'input' => [
-               /*  [
-                    'type' => 'text',
-                    'label' => ('Id AUTH:'),
-                    'name' => 'id_auth',
-                    'id' => 'id_auth', 
-                    'required' => TRUE,
-				], */
-				[
-					'type' => 'select',
-					'label' => $this->l('AUTH:'),
-					'id' => 'id_booker',
-					'name' => 'id_booker',
-					'required' => true,
-					'options' => array(
-						'query' => $idevents = array(
-							array(
-								'id_booker' => 1,
-								'label' => 'id_booker 1',
-								'value' => 'id_booker 1',
-								'name' => 'id_booker 1',
-								'option' => 'id_booker 1'
-							),
-							array(
-								'id_booker' => 2,
-								'label' => 'id_booker 2',
-								'value' => 'id_booker 2',
-								'name' => 'id_booker 2',
-								'option' => 'id_booker 2'
-							),  
-							array(
-								'id_booker' => 3,
-								'label' => 'id_booker 3',
-								'value' => 'id_booker 3',
-								'name' => 'id_booker 3',
-								'option' => 'id_booker 3'
-							),                                        
-						),
-						'id' => 'id_booker',
-						'name' => 'id_booker'
-					)
-				],
-				[
+        
+        // Récupérer les bookers disponibles
+        $booker_options = $this->getBookerOptions();
+        
+        if (empty($booker_options)) {
+            $this->errors[] = 'Aucun booker disponible. Créez d\'abord un booker dans "Éléments à réserver".';
+            return false;
+        }
+        
+        $this->fields_form = array(
+            'legend' => array(
+                'title' => $this->module->l('Gérer les disponibilités'),
+                'icon' => 'icon-calendar'
+            ),
+            'input' => array(
+                array(
+                    'type' => 'select',
+                    'label' => 'Booker',
+                    'id' => 'id_booker',
+                    'name' => 'id_booker',
+                    'required' => true,
+                    'options' => array(
+                        'query' => $booker_options,
+                        'id' => 'id_booker',
+                        'name' => 'name'
+                    ),
+                    'desc' => 'Sélectionner l\'élément pour lequel définir les disponibilités'
+                ),
+                array(
                     'type' => 'datetime',
-                    'label' => ('From:'),
+                    'label' => 'Date et heure de début',
                     'name' => 'date_from',
                     'id' => 'date_from', 
-                    'required' => TRUE,
-				],
-                [
+                    'required' => true,
+                    'desc' => 'Date et heure à partir de laquelle l\'élément est disponible'
+                ),
+                array(
                     'type' => 'datetime',
-                    'label' => ('To:'),
+                    'label' => 'Date et heure de fin',
                     'name' => 'date_to',
                     'id' => 'date_to', 
-                    'required' => TRUE,
-				],
-                
-                [
+                    'required' => true,
+                    'desc' => 'Date et heure jusqu\'à laquelle l\'élément est disponible'
+                ),
+                array(
                     'type' => 'switch',
-                    'label' => ('Displayed:'),
+                    'label' => 'Actif',
                     'name' => 'active',
-                    'required' => FALSE,
-                    'is_bool' => FALSE,
-                    'values' => array(array(
-                            'id' => 'require_on',
+                    'required' => false,
+                    'is_bool' => true,
+                    'values' => array(
+                        array(
+                            'id' => 'active_on',
                             'value' => 1,
-                            'label' => ('Yes')), array(
-                            'id' => 'require_off',
+                            'label' => 'Oui'
+                        ), 
+                        array(
+                            'id' => 'active_off',
                             'value' => 0,
-                            'label' => ('No'))),
-                ]
-			],
-            'submit' => ['title' => ('   Save   ')],			
-		];
+                            'label' => 'Non'
+                        )
+                    ),
+                )
+            ),
+            'submit' => array('title' => 'Sauvegarder'),			
+        );
 
-       /*  if (Shop::isFeatureActive()) {
-            $this->fields_form['input'][] = array(
-                'type' => 'shop',
-                'label' => ('Shop association:'),
-                'name' => 'checkBoxShopAsso',
-                );
-        } */
-		$helper = parent::renderForm();
-		/* $helper->show_toolbar = true;
-		$helper->bulk_actions = true; 
-		$helper->identifier = "id_auth";
-		$this->has_bulk_actions = true;
-		*/
-        return $helper;
+        return parent::renderForm();
     }
-	public function initPageHeaderToolbar()
+    
+    /**
+     * Validation avant sauvegarde
+     */
+    private function validateAvailability($availability)
     {
- 
-        //Bouton d'ajout
-        $this->page_header_toolbar_btn['new'] = array(
-            'href' => self::$currentIndex . '&add' . $this->table . '&token=' . $this->token,
-            'desc' => $this->module->l('Add new Booker Auth'),
-            'icon' => 'process-icon-new'
-        );
- 
-        parent::initPageHeaderToolbar();
-    } 
-	public function ajaxProcessManualPosition() {		
-		
-		$id=Tools::getValue('id'); 
-		$valeur=Tools::getValue('valeur');
-		$data[]=$id;
-		$data[]=$valeur;
-		
-		$sql="UPDATE `"._DB_PREFIX_."booker` set manual_position=".$valeur." where id_auth=".$id;
-		$manual_position = Db::getInstance()->query($sql); 		
-		echo json_encode($data);//something you want to return 
-		exit; 
-	}
-	/* public function postProcess()
-	{
-		//if ((Tools::isSubmit('manual_position_post')) == true) {
-			print_r($_POST);
-			$id_auth = (int)Tools::getValue('id_auth_ajax');
-			$manual_position = (int)Tools::getValue('manual_position_ajax');
-			$sql="UPDATE `"._DB_PREFIX_."booker` set manual_position=".$manual_position." where id_auth=".$id_auth;
-			$manual_position = Db::getInstance()->query($sql); 
-		//}		
-		parent::postProcess();
-		return false;
-	} */
-	/* public function initPageHeaderToolbar()
-    {
- 
-        //Bouton d'ajout
-        $this->page_header_toolbar_btn['new'] = array(
-            'href' => self::$currentIndex . '&add' . $this->table . '&token=' . $this->token,
-            'desc' => $this->module->l('Add new Sample'),
-            'icon' => 'process-icon-new'
-        );
- 
-        parent::initPageHeaderToolbar();
-    } */
-	/* public function setMedia() {
-        parent::setMedia();       
-        $this->context->controller->addJS('modules/'.$this->name.'/js/ajax.js');
+        // Vérifier que la date de début est antérieure à la date de fin
+        if ($availability->date_from >= $availability->date_to) {
+            $this->errors[] = 'La date de début doit être antérieure à la date de fin';
+            return false;
+        }
         
-    } */
+        // Vérifier que le booker existe
+        $booker = new Booker($availability->id_booker);
+        if (!Validate::isLoadedObject($booker)) {
+            $this->errors[] = 'Le booker sélectionné n\'existe pas';
+            return false;
+        }
+        
+        // Vérifier les chevauchements avec d'autres disponibilités du même booker
+        $sql = 'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'booker_auth` 
+                WHERE `id_booker` = ' . (int)$availability->id_booker . '
+                AND `id_auth` != ' . (int)$availability->id . '
+                AND `active` = 1
+                AND (
+                    (`date_from` <= "' . pSQL($availability->date_from) . '" AND `date_to` > "' . pSQL($availability->date_from) . '")
+                    OR (`date_from` < "' . pSQL($availability->date_to) . '" AND `date_to` >= "' . pSQL($availability->date_to) . '")
+                    OR (`date_from` >= "' . pSQL($availability->date_from) . '" AND `date_to` <= "' . pSQL($availability->date_to) . '")
+                )';
+        
+        if (Db::getInstance()->getValue($sql)) {
+            $this->errors[] = 'Cette période de disponibilité chevauche avec une autre période existante pour ce booker';
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Ajout d'une disponibilité
+     */
+    public function processAdd()
+    {
+        $object = new $this->className();
+        $this->copyFromPost($object, $this->table);
+        
+        // Ajouter les dates de création/modification
+        $object->date_add = date('Y-m-d H:i:s');
+        $object->date_upd = date('Y-m-d H:i:s');
+        
+        // Valider la disponibilité
+        if (!$this->validateAvailability($object)) {
+            return false;
+        }
+        
+        if ($object->add()) {
+            $this->confirmations[] = 'Disponibilité créée avec succès';
+            return true;
+        } else {
+            $this->errors[] = 'Erreur lors de la création de la disponibilité';
+            return false;
+        }
+    }
+    
+    /**
+     * Mise à jour d'une disponibilité
+     */
+    public function processUpdate()
+    {
+        $id = (int)Tools::getValue($this->identifier);
+        $object = new $this->className($id);
+        
+        if (!Validate::isLoadedObject($object)) {
+            $this->errors[] = 'Disponibilité introuvable';
+            return false;
+        }
+        
+        $this->copyFromPost($object, $this->table);
+        $object->date_upd = date('Y-m-d H:i:s');
+        
+        // Valider la disponibilité
+        if (!$this->validateAvailability($object)) {
+            return false;
+        }
+        
+        if ($object->update()) {
+            $this->confirmations[] = 'Disponibilité mise à jour avec succès';
+            return true;
+        } else {
+            $this->errors[] = 'Erreur lors de la mise à jour de la disponibilité';
+            return false;
+        }
+    }
+    
+    public function initPageHeaderToolbar()
+    {
+        // Vérifier s'il y a des bookers disponibles
+        $booker_count = Db::getInstance()->getValue('
+            SELECT COUNT(*) 
+            FROM `' . _DB_PREFIX_ . 'booker` 
+            WHERE active = 1
+        ');
+        
+        if ($booker_count > 0) {
+            $this->page_header_toolbar_btn['new'] = array(
+                'href' => self::$currentIndex . '&add' . $this->table . '&token=' . $this->token,
+                'desc' => 'Ajouter une nouvelle disponibilité',
+                'icon' => 'process-icon-new'
+            );
+        } else {
+            $this->page_header_toolbar_btn['add_booker'] = array(
+                'href' => $this->context->link->getAdminLink('AdminBooker') . '&add' . 'booker',
+                'desc' => 'Créer d\'abord un booker',
+                'icon' => 'process-icon-new'
+            );
+        }
+        
+        parent::initPageHeaderToolbar();
+    }
+    
+    public function renderList()
+    {
+        // Vérifier s'il y a des bookers
+        $booker_count = Db::getInstance()->getValue('
+            SELECT COUNT(*) 
+            FROM `' . _DB_PREFIX_ . 'booker` 
+            WHERE active = 1
+        ');
+        
+        if ($booker_count == 0) {
+            $this->context->smarty->assign('warning_no_booker', true);
+        }
+        
+        $list = parent::renderList();
+        
+        $this->context->smarty->assign(array(		  
+            'ajaxUrl' => $this->context->link->getAdminLink('AdminBookerAuth'),
+            'booker_admin_link' => $this->context->link->getAdminLink('AdminBooker')
+        ));
+        
+        $warning = '';
+        if ($booker_count == 0) {
+            $warning = '<div class="alert alert-warning">
+                <strong>Attention :</strong> Aucun booker n\'est disponible. 
+                <a href="' . $this->context->link->getAdminLink('AdminBooker') . '" class="btn btn-primary btn-sm">
+                    Créer un booker
+                </a>
+            </div>';
+        }
+        
+        $content = $this->context->smarty->fetch($this->getTemplatePath().'ajax.tpl');
+        
+        return $warning . $list . $content;
+    }
 }
