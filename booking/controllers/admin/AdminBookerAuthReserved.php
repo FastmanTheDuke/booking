@@ -196,11 +196,11 @@ class AdminBookerAuthReservedController extends ModuleAdminControllerCore
         
         // Récupérer les bookers disponibles
         $bookers = Db::getInstance()->executeS('
-            SELECT b.id_booker, bl.name
+            SELECT b.id_booker, b.name
             FROM `' . _DB_PREFIX_ . 'booker` b
             LEFT JOIN `' . _DB_PREFIX_ . 'booker_lang` bl ON (b.id_booker = bl.id_booker AND bl.id_lang = ' . (int)$this->context->language->id . ')
             WHERE b.active = 1
-            ORDER BY bl.name
+            ORDER BY b.name
         ');
         
         $booker_options = array();
