@@ -104,21 +104,40 @@ class Booking extends Module  {
     }
 
 	public function installSql()
-    {
-        try {
-              
-            // Création des tables du système de réservation
-			require_once (dirname(__FILE__). '/sql/booker.php');
-			require_once (dirname(__FILE__). '/sql/bookerauth.php');
-			require_once (dirname(__FILE__). '/sql/bookerauthreserved.php');
+	{
+		try {
+			$success = true;
 			
-        } catch (PrestaShopException $e) {
-            PrestaShopLogger::addLog('Erreur installation SQL module Resa: ' . $e->getMessage());
-            return false;
-        }
- 
-        return $createTable;
-    }	
+			// Création des tables du système de réservation
+			require_once (dirname(__FILE__). '/sql/booker.php');
+			if (!$booker || !$booker_lang) {
+				PrestaShopLogger::addLog('Erreur création table booker');
+				$success = false;
+			}
+			
+			require_once (dirname(__FILE__). '/sql/bookerauth.php');
+			if (!$bookerauth) {
+				PrestaShopLogger::addLog('Erreur création table booker_auth');
+				$success = false;
+			}
+			
+			require_once (dirname(__FILE__). '/sql/bookerauthreserved.php');
+			if (!$bookerauthreserved) {
+				PrestaShopLogger::addLog('Erreur création table booker_auth_reserved');
+				$success = false;
+			}
+			
+			if (!$success) {
+				throw new PrestaShopException('Erreur lors de la création des tables');
+			}
+			
+			return true;
+			
+		} catch (Exception $e) {
+			PrestaShopLogger::addLog('Erreur installation SQL module Booking: ' . $e->getMessage());
+			return false;
+		}
+	}
     
 	private function installTab()
 	{
