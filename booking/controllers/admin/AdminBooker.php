@@ -1,201 +1,224 @@
 <?php
 require_once (dirname(__FILE__). '/../../classes/Booker.php');
+
 class AdminBookerController extends ModuleAdminControllerCore
 {
     protected $_module = NULL;
-	public $controller_type='admin';   
-    protected $position_identifier = 'id_booker'; //this filed is required if you use position for sorting
+    public $controller_type='admin';   
+    protected $position_identifier = 'id_booker';
 
     public function __construct()
     {
-		$this->display = 'options';
+        $this->display = 'options';
         $this->context = Context::getContext();
-		$this->bootstrap = true;
+        $this->bootstrap = true;
         $this->table = 'booker';
         $this->identifier = 'id_booker';
         $this->className = 'Booker';
         $this->_defaultOrderBy = 'id_booker';
-        $this->lang = TRUE;
-		$this->allow_export = true;
-        //$this->addRowAction('edit');
-        //$this->addRowAction('delete');
-       // Shop::addTableAssociation($this->table, array('type' => 'shop'));
+        $this->_defaultOrderWay = 'DESC';
+        $this->lang = true;
+        $this->allow_export = true;
 		
         $this->fields_list = array(
-            'id_booker' => array('title' => ('ID'), 'filter_key' => 'a!id_booker', 'align' => 'center', 'width' => 25,'class' => 'fixed-width-xs','remove_onclick' => true),            
-            'name' => array('title' => ('name'), 'width' => '300', 'filter_key' => 'b!name','remove_onclick' => true),
-            'description' => array('title' => ('description'), 'width' => '300','lang' => true,'remove_onclick' => true),				
-            'google_account' => array('title' => ('google_account'), 'width' => '300','remove_onclick' => true),
-            'active' => array('title' => ('Displayed'), 'width' => 25, 'align' => 'center', 'active' => 'status', 'type' => 'bool', 'orderby' => FALSE,'remove_onclick' => true),
+            'id_booker' => array(
+                'title' => 'ID', 
+                'filter_key' => 'a!id_booker', 
+                'align' => 'center', 
+                'width' => 25,
+                'class' => 'fixed-width-xs',
+                'remove_onclick' => true
+            ),            
+            'name' => array(
+                'title' => 'Nom', 
+                'width' => '300', 
+                'filter_key' => 'a!name',
+                'remove_onclick' => true
+            ),
+            'description' => array(
+                'title' => 'Description', 
+                'width' => '300',
+                'lang' => true,
+                'remove_onclick' => true
+            ),				
+            'google_account' => array(
+                'title' => 'Compte Google', 
+                'width' => '200',
+                'remove_onclick' => true
+            ),
+            'date_add' => array(
+                'title' => 'Date création', 
+                'align' => 'center',
+                'type' => 'datetime',
+                'filter_key' => 'a!date_add',
+                'remove_onclick' => true
+            ),
+            'active' => array(
+                'title' => 'Actif', 
+                'width' => 25, 
+                'align' => 'center', 
+                'active' => 'status', 
+                'type' => 'bool', 
+                'orderby' => false,
+                'remove_onclick' => true
+            ),
         );
-		$this->bulk_actions = array('delete' => array('text' => 'Delete selected',
-                    'confirm' => 'Delete selected items?'));
-					
+        
+        $this->bulk_actions = array(
+            'delete' => array(
+                'text' => 'Supprimer sélectionnés',
+                'confirm' => 'Supprimer les éléments sélectionnés ?',
+                'icon' => 'icon-trash'
+            ),
+            'enable' => array(
+                'text' => 'Activer sélectionnés',
+                'icon' => 'icon-power-off'
+            ),
+            'disable' => array(
+                'text' => 'Désactiver sélectionnés',
+                'icon' => 'icon-power-off'
+            )
+        );
         
         $this->has_bulk_actions = true;
         $this->shopLinkType = '';
-        $this->no_link = false;       // Content line is clickable if false
-        $this->simple_header = false; // false = search header, true = not header. No filters, no paginations and no sorting.
-        $this->actions = array('edit', 'delete');
-		$this->list_no_link = true;
-		//$this->initToolbar();
-		//$this->processFilter();
-		//$this->tpl_list_vars['ajaxUrl'] = $this->context->link->getModuleLink($this->module->name,'display', array('ajax'=>true));		
-		
-		//echo $this->context->link->getAdminLink('AdminController');
-		//echo $this->context->link->getAdminLink('AdminFaq');
-		//$this->setTemplate('module:'.$this->module->name.'/views/templates/front/display.tpl');
+        $this->no_link = false;
+        $this->simple_header = false;
+        $this->actions = array('edit', 'delete', 'view');
+        $this->list_no_link = false;
+        
         parent::__construct();
     }
-	public function editableField($manual_position){
-		//echo $manual_position;
-		$this->context->smarty->assign('manual_position', $manual_position);  
-		//return $this->module->setTemplate('module:quizz/views/templates/admin/editable_field.tpl')->fetch();
-		return $this->context->smarty->fetch($this->getTemplatePath().'editable_field.tpl');
-	}
-	public function editableCombinationPriceMethod($value, $question)
-    {
-		$this->context->smarty->assign('value', $value);  
-		$this->context->smarty->assign('id', (int)$question['id_booker']);
-		return $this->context->smarty->fetch($this->getTemplatePath().'editable_field.tpl');
-    }	
-	public function renderList()
-	{
-		//https://www.prestashop.com/forums/topic/1063433-param%C3%A8tre-champs-en-fonction-dun-autre-dans-admin-controller-module/
-		$list = parent::renderList();	
-		$this->context->smarty->assign(
-		array(		  
-		  'ajaxUrl' => $this->context->link->getAdminLink('AdminBooker')
-		));
-		$content = $this->context->smarty->fetch($this->getTemplatePath().'ajax.tpl');
-		return $list . $content;
-	}
+    
     public function renderForm()
     {
         $this->display = 'edit';
         $this->initToolbar();
 		
-        $this->fields_form = [       
-            //'tinymce' => true,
-			//'legend' => "test",
-			//'title' => $this->l('FAQ list'),
-			//'icon' => 'icon-tags',
-			'legend' => [
-                'title' => $this->module->l('Edit Booker'),
+        $this->fields_form = array(
+            'legend' => array(
+                'title' => $this->module->l('Gérer l\'élément à réserver'),
                 'icon' => 'icon-cog'
-            ],
-            'input' => [
-                [
+            ),
+            'input' => array(
+                array(
                     'type' => 'text',
-                    'label' => ('Name:'),
+                    'label' => 'Nom',
                     'name' => 'name',
                     'id' => 'name', 
-                    'required' => TRUE,
+                    'required' => true,
                     'size' => 50,
-				],
-                [
-					'type' => 'textarea',
-					'label' => $this->l('Description MULTILANG'),
-					'name' => 'description',
-					'cols' => 60,
-					'required' => false,
-					'lang' => true,
-					'rows' => 10,
-					'class' => 'rte',
-					'autoload_rte' => true,
-					'hint' => ('Invalid characters:').' <>;=#{}',
-				],
-				[
+                ),
+                array(
+                    'type' => 'textarea',
+                    'label' => 'Description (multilingue)',
+                    'name' => 'description',
+                    'cols' => 60,
+                    'required' => false,
+                    'lang' => true,
+                    'rows' => 10,
+                    'class' => 'rte',
+                    'autoload_rte' => true,
+                    'hint' => 'Description détaillée de l\'élément à réserver',
+                ),
+                array(
                     'type' => 'text',
-                    'label' => ('GOOGLE ACCOUNT:'),
+                    'label' => 'Compte Google (email)',
                     'name' => 'google_account',
-                    'id' => 'name',
-                    'size' => 200,
-				],
-                [
+                    'id' => 'google_account',
+                    'size' => 50,
+                    'desc' => 'Email Google associé pour la gestion du calendrier'
+                ),
+                array(
                     'type' => 'switch',
-                    'label' => ('Displayed:'),
+                    'label' => 'Actif',
                     'name' => 'active',
-                    'required' => FALSE,
-                    'is_bool' => FALSE,
-                    'values' => array(array(
-                            'id' => 'require_on',
+                    'required' => false,
+                    'is_bool' => true,
+                    'values' => array(
+                        array(
+                            'id' => 'active_on',
                             'value' => 1,
-                            'label' => ('Yes')), array(
-                            'id' => 'require_off',
+                            'label' => 'Oui'
+                        ), 
+                        array(
+                            'id' => 'active_off',
                             'value' => 0,
-                            'label' => ('No'))),
-                ]
-			],
-            'submit' => ['title' => ('   Save   ')],			
-		];
+                            'label' => 'Non'
+                        )
+                    ),
+                )
+            ),
+            'submit' => array('title' => 'Sauvegarder'),			
+        );
 
-       /*  if (Shop::isFeatureActive()) {
-            $this->fields_form['input'][] = array(
-                'type' => 'shop',
-                'label' => ('Shop association:'),
-                'name' => 'checkBoxShopAsso',
-                );
-        } */
-		$helper = parent::renderForm();
-		/* $helper->show_toolbar = true;
-		$helper->bulk_actions = true; 
-		$helper->identifier = "id_booker";
-		$this->has_bulk_actions = true;
-		*/
-        return $helper;
+        return parent::renderForm();
     }
-	public function initPageHeaderToolbar()
+    
+    /**
+     * Ajout d'un booker
+     */
+    public function processAdd()
     {
- 
-        //Bouton d'ajout
-        $this->page_header_toolbar_btn['new'] = array(
-            'href' => self::$currentIndex . '&add' . $this->table . '&token=' . $this->token,
-            'desc' => $this->module->l('Add new Booker'),
-            'icon' => 'process-icon-new'
-        );
- 
-        parent::initPageHeaderToolbar();
-    } 
-	public function ajaxProcessManualPosition() {		
-		
-		$id=Tools::getValue('id'); 
-		$valeur=Tools::getValue('valeur');
-		$data[]=$id;
-		$data[]=$valeur;
-		
-		$sql="UPDATE `"._DB_PREFIX_."booker` set manual_position=".$valeur." where id_booker=".$id;
-		$manual_position = Db::getInstance()->query($sql); 		
-		echo json_encode($data);//something you want to return 
-		exit; 
-	}
-	/* public function postProcess()
-	{
-		//if ((Tools::isSubmit('manual_position_post')) == true) {
-			print_r($_POST);
-			$id_booker = (int)Tools::getValue('id_booker_ajax');
-			$manual_position = (int)Tools::getValue('manual_position_ajax');
-			$sql="UPDATE `"._DB_PREFIX_."booker` set manual_position=".$manual_position." where id_booker=".$id_booker;
-			$manual_position = Db::getInstance()->query($sql); 
-		//}		
-		parent::postProcess();
-		return false;
-	} */
-	/* public function initPageHeaderToolbar()
-    {
- 
-        //Bouton d'ajout
-        $this->page_header_toolbar_btn['new'] = array(
-            'href' => self::$currentIndex . '&add' . $this->table . '&token=' . $this->token,
-            'desc' => $this->module->l('Add new Sample'),
-            'icon' => 'process-icon-new'
-        );
- 
-        parent::initPageHeaderToolbar();
-    } */
-	/* public function setMedia() {
-        parent::setMedia();       
-        $this->context->controller->addJS('modules/'.$this->name.'/js/ajax.js');
+        $object = new $this->className();
+        $this->copyFromPost($object, $this->table);
         
-    } */
+        // Ajouter les dates de création/modification
+        $object->date_add = date('Y-m-d H:i:s');
+        $object->date_upd = date('Y-m-d H:i:s');
+        
+        if ($object->add()) {
+            $this->confirmations[] = 'Élément créé avec succès';
+            return true;
+        } else {
+            $this->errors[] = 'Erreur lors de la création';
+            return false;
+        }
+    }
+    
+    /**
+     * Mise à jour d'un booker
+     */
+    public function processUpdate()
+    {
+        $id = (int)Tools::getValue($this->identifier);
+        $object = new $this->className($id);
+        
+        if (!Validate::isLoadedObject($object)) {
+            $this->errors[] = 'Élément introuvable';
+            return false;
+        }
+        
+        $this->copyFromPost($object, $this->table);
+        $object->date_upd = date('Y-m-d H:i:s');
+        
+        if ($object->update()) {
+            $this->confirmations[] = 'Élément mis à jour avec succès';
+            return true;
+        } else {
+            $this->errors[] = 'Erreur lors de la mise à jour';
+            return false;
+        }
+    }
+    
+    public function initPageHeaderToolbar()
+    {
+        $this->page_header_toolbar_btn['new'] = array(
+            'href' => self::$currentIndex . '&add' . $this->table . '&token=' . $this->token,
+            'desc' => 'Ajouter un nouvel élément à réserver',
+            'icon' => 'process-icon-new'
+        );
+        
+        parent::initPageHeaderToolbar();
+    }
+    
+    public function renderList()
+    {
+        $list = parent::renderList();	
+        $this->context->smarty->assign(array(		  
+            'ajaxUrl' => $this->context->link->getAdminLink('AdminBooker')
+        ));
+        $content = $this->context->smarty->fetch($this->getTemplatePath().'ajax.tpl');
+        return $list . $content;
+    }
 }
