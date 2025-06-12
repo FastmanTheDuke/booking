@@ -2,7 +2,7 @@
 require_once (dirname(__FILE__). '/../../classes/BookerAuth.php');
 require_once (dirname(__FILE__). '/../../classes/Booker.php');
 
-class AdminBookerAuthController extends ModuleAdminControllerCore
+class AdminBookerAuthController extends ModuleAdminController
 {
     protected $_module = NULL;
     public $controller_type='admin';   

@@ -8,7 +8,7 @@ require_once(dirname(__FILE__) . '/../../classes/Booker.php');
 require_once(dirname(__FILE__) . '/../../classes/BookerAuth.php');
 require_once(dirname(__FILE__) . '/../../classes/BookerAuthReserved.php');
 
-class AdminBookerCalendarController extends ModuleAdminControllerCore
+class AdminBookerCalendarController extends ModuleAdminController
 {
     protected $_module = NULL;
     public $controller_type = 'admin';   
@@ -24,9 +24,10 @@ class AdminBookerCalendarController extends ModuleAdminControllerCore
     public function renderOptions()
     {
         // Ajouter les ressources CSS/JS nécessaires
-        $this->addJS(_MODULE_DIR_ . $this->module->name . '/js/fullcalendar.min.js');
+       // Charger FullCalendar depuis CDN
+		$this->context->controller->addJS('https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.5/main.min.js');
+		$this->context->controller->addCSS('https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.5/main.min.css');
         $this->addJS(_MODULE_DIR_ . $this->module->name . '/js/availability-calendar.js');
-        $this->addCSS(_MODULE_DIR_ . $this->module->name . '/css/fullcalendar.min.css');
         $this->addCSS(_MODULE_DIR_ . $this->module->name . '/css/admin-calendar.css');
         
         // Récupérer la liste des bookers

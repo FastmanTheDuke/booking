@@ -70,23 +70,61 @@ class Booking extends Module  {
     }
     
     public function uninstall()
-    {
-        if (!parent::uninstall()) {
-            return false;
-        }
-        
-        // Désinstaller les onglets admin
-        $this->uninstallTab();
-        
-        // Supprimer les tâches cron
-        $this->removeCronTask();
-        
-        // Optionnel : supprimer les tables (décommenter si souhaité)
-        // $this->uninstallSql();
-        
-        return true;
-    }
-    
+	{
+		if (!parent::uninstall()) {
+			return false;
+		}
+		
+		// Désinstaller les onglets admin
+		$this->uninstallTab();
+		
+		// Supprimer les tâches cron
+		$this->removeCronTask();
+		
+		// Supprimer toutes les configurations
+		$this->uninstallConfiguration();
+		
+		// ACTIVER la suppression des tables pour un nettoyage complet
+		$this->uninstallSql();
+		
+		return true;
+	}
+    private function uninstallConfiguration()
+	{
+		$configs = [
+			'BOOKING_CRON_CLEAN_RESERVATIONS',
+			'BOOKING_DEFAULT_PRICE',
+			'BOOKING_DEPOSIT_AMOUNT',
+			'BOOKING_PAYMENT_ENABLED',
+			'BOOKING_STRIPE_ENABLED',
+			'BOOKING_AUTO_CONFIRM',
+			'BOOKING_EXPIRY_HOURS',
+			'BOOKING_MULTI_SELECT',
+			'BOOKING_EMERGENCY_PHONE',
+			'BOOKING_CMS_ID'
+		];
+		
+		foreach ($configs as $config) {
+			Configuration::deleteByName($config);
+		}
+		
+		return true;
+	}
+	private function uninstallSql()
+	{
+		$tables = [
+			'booker_auth_reserved',
+			'booker_auth', 
+			'booker_lang',
+			'booker'
+		];
+		
+		foreach ($tables as $table) {
+			Db::getInstance()->execute('DROP TABLE IF EXISTS `' . _DB_PREFIX_ . $table . '`');
+		}
+		
+		return true;
+	}
     /**
      * Installation de la configuration par défaut
      */
@@ -148,25 +186,6 @@ class Booking extends Module  {
 	private function updateReservationTable()
 	{
 		$alterQueries = [
-			"ALTER TABLE `"._DB_PREFIX_."booker_auth_reserved` 
-			 ADD COLUMN IF NOT EXISTS `booking_reference` VARCHAR(20) NULL AFTER `status`,
-			 ADD COLUMN IF NOT EXISTS `customer_firstname` VARCHAR(100) NULL AFTER `booking_reference`,
-			 ADD COLUMN IF NOT EXISTS `customer_lastname` VARCHAR(100) NULL AFTER `customer_firstname`,
-			 ADD COLUMN IF NOT EXISTS `customer_email` VARCHAR(150) NULL AFTER `customer_lastname`,
-			 ADD COLUMN IF NOT EXISTS `customer_phone` VARCHAR(20) NULL AFTER `customer_email`,
-			 ADD COLUMN IF NOT EXISTS `customer_message` TEXT NULL AFTER `customer_phone`,
-			 ADD COLUMN IF NOT EXISTS `total_price` DECIMAL(10,2) NULL AFTER `customer_message`,
-			 ADD COLUMN IF NOT EXISTS `deposit_amount` DECIMAL(10,2) NULL AFTER `total_price`,
-			 ADD COLUMN IF NOT EXISTS `id_order` INT(10) NULL AFTER `deposit_amount`,
-			 ADD COLUMN IF NOT EXISTS `payment_status` TINYINT(1) DEFAULT 0 AFTER `id_order`,
-			 ADD COLUMN IF NOT EXISTS `cancellation_reason` TEXT NULL AFTER `payment_status`",
-			 
-			"ALTER TABLE `"._DB_PREFIX_."booker_auth_reserved` 
-			 ADD INDEX IF NOT EXISTS `idx_booking_reference` (`booking_reference`),
-			 ADD INDEX IF NOT EXISTS `idx_customer_email` (`customer_email`),
-			 ADD INDEX IF NOT EXISTS `idx_id_order` (`id_order`),
-			 ADD INDEX IF NOT EXISTS `idx_payment_status` (`payment_status`)",
-			 
 			"ALTER TABLE `"._DB_PREFIX_."booker` 
 			 ADD COLUMN IF NOT EXISTS `price` DECIMAL(10,2) DEFAULT 50.00 AFTER `google_account`,
 			 ADD COLUMN IF NOT EXISTS `deposit_required` TINYINT(1) DEFAULT 1 AFTER `price`,
