@@ -1,440 +1,334 @@
 {extends file='page.tpl'}
 
 {block name="page_title"}
-    Réservation en ligne
+    {l s='Réservation en ligne' d='Modules.Booking.Front'}
 {/block}
 
 {block name="page_content"}
-<div class="booking-container">
-    
-    <!-- Section de sélection des éléments -->
-    <div class="booking-section booker-selection">
-        <h2>Choisissez votre réservation</h2>
+<div class="booking-interface">
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <h1>{l s='Réservez votre créneau' d='Modules.Booking.Front'}</h1>
+                <p class="lead">{l s='Sélectionnez vos dates et créneaux horaires préférés' d='Modules.Booking.Front'}</p>
+            </div>
+        </div>
         
-        {if $bookers && count($bookers) > 0}
-            <div class="bookers-grid">
-                {foreach from=$bookers item=booker}
-                    <div class="booker-card {if !$booker.has_availability}unavailable{/if}" 
-                         data-booker-id="{$booker.id_booker}">
-                        
-                        <div class="booker-image">
-                            <img src="{$booker.image_url}" alt="{$booker.name}" loading="lazy">
-                            {if !$booker.has_availability}
-                                <div class="unavailable-overlay">
-                                    <span>Indisponible</span>
-                                </div>
-                            {/if}
-                        </div>
-                        
-                        <div class="booker-info">
-                            <h3>{$booker.name}</h3>
-                            {if $booker.description}
-                                <p class="booker-description">{$booker.description|truncate:100}</p>
-                            {/if}
-                            
-                            <div class="booker-price">
-                                À partir de <span class="price">{$booker.base_price|string_format:"%.2f"}€</span>
+        {* Sélection du booker *}
+        <div class="booker-selection">
+            <h3>{l s='Que souhaitez-vous réserver ?' d='Modules.Booking.Front'}</h3>
+            {if $bookers && count($bookers) > 0}
+                <select class="booker-selector form-control" id="booker_selector">
+                    <option value="">{l s='Sélectionnez un élément...' d='Modules.Booking.Front'}</option>
+                    {foreach $bookers as $booker}
+                        <option value="{$booker.id_booker}" 
+                                {if $selected_booker == $booker.id_booker}selected{/if}
+                                data-description="{$booker.description|escape:'html':'UTF-8'}"
+                                data-price="{$booker.price|default:50}">
+                            {$booker.name|escape:'html':'UTF-8'}
+                        </option>
+                    {/foreach}
+                </select>
+                
+                {* Informations sur le booker sélectionné *}
+                {foreach $bookers as $booker}
+                    <div class="booker-info" id="booker_info_{$booker.id_booker}" style="display: none;">
+                        <h4>{$booker.name|escape:'html':'UTF-8'}</h4>
+                        {if $booker.description}
+                            <div class="booker-description">
+                                {$booker.description nofilter}
                             </div>
-                            
-                            {if $booker.has_availability}
-                                <button type="button" class="btn btn-primary select-booker-btn">
-                                    Sélectionner
-                                </button>
-                            {else}
-                                <button type="button" class="btn btn-secondary" disabled>
-                                    Indisponible
-                                </button>
-                            {/if}
+                        {/if}
+                        <div class="booker-price">
+                            <strong>{l s='Tarif :' d='Modules.Booking.Front'} {$booker.price|default:50}€ {l s='par créneau' d='Modules.Booking.Front'}</strong>
                         </div>
                     </div>
                 {/foreach}
-            </div>
-        {else}
-            <div class="alert alert-info">
-                Aucun élément disponible pour le moment.
-            </div>
-        {/if}
-    </div>
-    
-    <!-- Section de réservation -->
-    <div class="booking-section reservation-form" id="reservation-section" style="display: none;">
-        <div class="section-header">
-            <h2>Détails de votre réservation</h2>
-            <button type="button" class="btn btn-link back-to-selection">
-                ← Changer de sélection
-            </button>
+            {else}
+                <div class="alert alert-warning">
+                    {l s='Aucun élément disponible à la réservation pour le moment.' d='Modules.Booking.Front'}
+                </div>
+            {/if}
         </div>
         
-        <div class="reservation-content">
-            <!-- Informations sur l'élément sélectionné -->
-            <div class="selected-booker-info">
-                <div class="booker-summary">
-                    <img id="selected-booker-image" src="" alt="">
-                    <div class="booker-details">
-                        <h3 id="selected-booker-name"></h3>
-                        <p id="selected-booker-description"></p>
-                        <div class="price-info">
-                            Prix de base: <span id="selected-booker-price"></span>€
+        <div class="booking-container" id="booking_container" style="display: none;">
+            <div class="booking-main">
+                {* Section calendrier *}
+                <div class="booking-calendar-section">
+                    <div class="booking-calendar">
+                        {* Le calendrier sera généré par JavaScript *}
+                        <div class="calendar-loading">
+                            <i class="fa fa-spinner fa-spin"></i>
+                            {l s='Chargement du calendrier...' d='Modules.Booking.Front'}
                         </div>
+                    </div>
+                </div>
+                
+                {* Section créneaux horaires *}
+                <div class="time-slots-section">
+                    <h3>{l s='Créneaux horaires disponibles' d='Modules.Booking.Front'}</h3>
+                    <div class="time-slots-container">
+                        <p class="no-slots">{l s='Sélectionnez une date pour voir les créneaux disponibles' d='Modules.Booking.Front'}</p>
                     </div>
                 </div>
             </div>
             
-            <!-- Formulaire de réservation -->
-            <form id="booking-form" class="booking-form">
-                <input type="hidden" id="selected-booker-id" name="booker_id" value="">
-                
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label for="booking-date">Date souhaitée *</label>
-                        <input type="date" 
-                               id="booking-date" 
-                               name="date" 
-                               class="form-control" 
-                               min="{$min_date}" 
-                               max="{$max_date}"
-                               required>
-                        <small class="form-text text-muted">
-                            Sélectionnez une date pour voir les créneaux disponibles
-                        </small>
-                    </div>
-                    
-                    <div class="form-group col-md-6">
-                        <label for="time-slots">Créneaux disponibles</label>
-                        <select id="time-slots" name="time_slot" class="form-control" disabled required>
-                            <option value="">Choisir d'abord une date</option>
-                        </select>
-                        <div id="slots-loading" class="text-center" style="display: none;">
-                            <i class="fas fa-spinner fa-spin"></i> Chargement des créneaux...
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Affichage du prix -->
-                <div class="price-summary" id="price-summary" style="display: none;">
-                    <div class="price-details">
-                        <div class="price-line">
-                            <span>Durée:</span>
-                            <span id="booking-duration"></span>
-                        </div>
-                        <div class="price-line total">
-                            <span>Total:</span>
-                            <span id="booking-total-price"></span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Informations client -->
-                <div class="customer-info-section">
-                    <h4>Vos informations</h4>
-                    
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="customer-name">Nom complet *</label>
+            <div class="booking-sidebar">
+                {* Formulaire client *}
+                <div class="customer-form">
+                    <h3>{l s='Vos informations' d='Modules.Booking.Front'}</h3>
+                    <form id="booking-form" data-multi-select="true">
+                        <div class="form-group">
+                            <label for="booking_firstname" class="required">
+                                {l s='Prénom' d='Modules.Booking.Front'}
+                            </label>
                             <input type="text" 
-                                   id="customer-name" 
-                                   name="customer_name" 
+                                   id="booking_firstname" 
+                                   name="firstname" 
                                    class="form-control" 
+                                   value="{if $customer_info}{$customer_info.firstname|escape:'html':'UTF-8'}{/if}"
                                    required>
                         </div>
                         
-                        <div class="form-group col-md-6">
-                            <label for="customer-email">Email *</label>
-                            <input type="email" 
-                                   id="customer-email" 
-                                   name="customer_email" 
+                        <div class="form-group">
+                            <label for="booking_lastname" class="required">
+                                {l s='Nom' d='Modules.Booking.Front'}
+                            </label>
+                            <input type="text" 
+                                   id="booking_lastname" 
+                                   name="lastname" 
                                    class="form-control" 
+                                   value="{if $customer_info}{$customer_info.lastname|escape:'html':'UTF-8'}{/if}"
                                    required>
-                            <small class="form-text text-muted">
-                                Vous recevrez une confirmation par email
-                            </small>
                         </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label for="customer-phone">Téléphone</label>
+                        
+                        <div class="form-group">
+                            <label for="booking_email" class="required">
+                                {l s='Email' d='Modules.Booking.Front'}
+                            </label>
+                            <input type="email" 
+                                   id="booking_email" 
+                                   name="email" 
+                                   class="form-control" 
+                                   value="{if $customer_info}{$customer_info.email|escape:'html':'UTF-8'}{/if}"
+                                   required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="booking_phone">
+                                {l s='Téléphone' d='Modules.Booking.Front'}
+                            </label>
                             <input type="tel" 
-                                   id="customer-phone" 
-                                   name="customer_phone" 
+                                   id="booking_phone" 
+                                   name="phone" 
                                    class="form-control">
                         </div>
                         
-                        <div class="form-group col-md-6">
-                            <label for="customer-notes">Notes ou demandes spéciales</label>
-                            <textarea id="customer-notes" 
-                                      name="notes" 
+                        <div class="form-group">
+                            <label for="booking_message">
+                                {l s='Message (optionnel)' d='Modules.Booking.Front'}
+                            </label>
+                            <textarea id="booking_message" 
+                                      name="message" 
                                       class="form-control" 
-                                      rows="3" 
-                                      placeholder="Informations complémentaires..."></textarea>
+                                      rows="3"
+                                      placeholder="{l s='Informations complémentaires...' d='Modules.Booking.Front'}"></textarea>
                         </div>
-                    </div>
+                    </form>
                 </div>
                 
-                <!-- Conditions -->
-                <div class="booking-conditions">
-                    <div class="form-check">
-                        <input type="checkbox" 
-                               class="form-check-input" 
-                               id="accept-conditions" 
-                               required>
-                        <label class="form-check-label" for="accept-conditions">
-                            J'accepte les <a href="#" data-toggle="modal" data-target="#conditions-modal">conditions de réservation</a> *
-                        </label>
+                {* Résumé de réservation *}
+                <div class="booking-summary">
+                    <h3>{l s='Récapitulatif' d='Modules.Booking.Front'}</h3>
+                    <p>{l s='Aucune réservation sélectionnée' d='Modules.Booking.Front'}</p>
+                    
+                    <button type="button" class="booking-submit btn btn-primary" disabled>
+                        <i class="fa fa-calendar-check"></i>
+                        {l s='Demander la réservation' d='Modules.Booking.Front'}
+                    </button>
+                    
+                    <div class="booking-info mt-3">
+                        <p class="small text-muted">
+                            <i class="fa fa-info-circle"></i>
+                            {l s='Votre demande sera examinée sous 24h. Un email de confirmation vous sera envoyé.' d='Modules.Booking.Front'}
+                        </p>
                     </div>
                 </div>
-                
-                <!-- Boutons d'action -->
-                <div class="booking-actions">
-                    <button type="button" class="btn btn-secondary" id="reset-form">
-                        Recommencer
-                    </button>
-                    <button type="submit" class="btn btn-primary btn-lg" id="submit-booking" disabled>
-                        <i class="fas fa-calendar-check"></i>
-                        Confirmer la réservation
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Section de confirmation -->
-    <div class="booking-section confirmation-section" id="confirmation-section" style="display: none;">
-        <div class="confirmation-content">
-            <div class="success-icon">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <h2>Demande de réservation envoyée !</h2>
-            <p class="confirmation-message">
-                Votre demande de réservation a été enregistrée avec succès. 
-                Vous recevrez une confirmation par email dans les plus brefs délais.
-            </p>
-            
-            <div class="reservation-summary">
-                <h4>Récapitulatif de votre demande :</h4>
-                <div class="summary-details">
-                    <!-- Détails remplis via JavaScript -->
-                </div>
-            </div>
-            
-            <div class="next-steps">
-                <h4>Prochaines étapes :</h4>
-                <ol>
-                    <li>Nous examinerons votre demande</li>
-                    <li>Vous recevrez une confirmation par email</li>
-                    <li>Un lien de paiement vous sera envoyé si la réservation est acceptée</li>
-                </ol>
-            </div>
-            
-            <div class="confirmation-actions">
-                <button type="button" class="btn btn-primary" onclick="location.reload()">
-                    Faire une nouvelle réservation
-                </button>
-                <a href="{$link->getPageLink('index')}" class="btn btn-secondary">
-                    Retour à l'accueil
-                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal des conditions -->
-<div class="modal fade" id="conditions-modal" tabindex="-1" role="dialog" aria-labelledby="conditions-modal-title" aria-hidden="true">
+{* Modal de confirmation *}
+<div class="modal fade" id="booking-confirmation-modal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="conditions-modal-title">Conditions de réservation</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
+                <h5 class="modal-title">
+                    <i class="fa fa-check-circle"></i>
+                    {l s='Confirmer votre réservation' d='Modules.Booking.Front'}
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                <h6>Conditions générales :</h6>
-                <ul>
-                    <li>Les réservations sont soumises à validation</li>
-                    <li>Le paiement sera demandé après acceptation de la réservation</li>
-                    <li>Une caution peut être demandée</li>
-                    <li>L'annulation doit se faire au moins 24h à l'avance</li>
-                    <li>En cas d'annulation tardive, des frais peuvent s'appliquer</li>
-                </ul>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>{l s='Vos informations' d='Modules.Booking.Front'}</h6>
+                        <p>
+                            <strong class="modal-customer-name"></strong><br>
+                            <span class="modal-customer-email"></span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>{l s='Détails de la réservation' d='Modules.Booking.Front'}</h6>
+                        <div class="modal-booking-details"></div>
+                    </div>
+                </div>
                 
-                <h6>Modalités de paiement :</h6>
-                <ul>
-                    <li>Paiement sécurisé par carte bancaire</li>
-                    <li>Possibilité de paiement par virement</li>
-                    <li>Facture fournie après paiement</li>
-                </ul>
-                
-                <h6>Responsabilité :</h6>
-                <p>
-                    Le client s'engage à utiliser l'élément réservé dans les règles de l'art 
-                    et sera tenu responsable de tout dommage causé.
-                </p>
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle"></i>
+                    {l s='Votre demande de réservation sera envoyée à notre équipe pour validation. Vous recevrez un email de confirmation dans les plus brefs délais.' d='Modules.Booking.Front'}
+                </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button>
-                <button type="button" class="btn btn-primary" data-dismiss="modal" id="accept-conditions-btn">
-                    J'accepte ces conditions
+                <button type="button" class="booking-cancel btn btn-secondary">
+                    {l s='Annuler' d='Modules.Booking.Front'}
+                </button>
+                <button type="button" class="booking-confirm btn btn-primary">
+                    <i class="fa fa-paper-plane"></i>
+                    {l s='Confirmer la réservation' d='Modules.Booking.Front'}
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Loading overlay -->
-<div class="loading-overlay" id="loading-overlay" style="display: none;">
-    <div class="loading-content">
-        <div class="spinner-border" role="status"></div>
-        <p>Traitement en cours...</p>
+{* Légende du calendrier *}
+<div class="calendar-legend mt-4">
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <h5>{l s='Légende' d='Modules.Booking.Front'}</h5>
+                <div class="legend-items">
+                    <span class="legend-item">
+                        <span class="legend-color available"></span>
+                        {l s='Disponible' d='Modules.Booking.Front'}
+                    </span>
+                    <span class="legend-item">
+                        <span class="legend-color selected"></span>
+                        {l s='Sélectionné' d='Modules.Booking.Front'}
+                    </span>
+                    <span class="legend-item">
+                        <span class="legend-color has-reservations"></span>
+                        {l s='Partiellement réservé' d='Modules.Booking.Front'}
+                    </span>
+                    <span class="legend-item">
+                        <span class="legend-color unavailable"></span>
+                        {l s='Non disponible' d='Modules.Booking.Front'}
+                    </span>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<script>
-// Variables globales pour JavaScript
-window.BookingConfig = {
-    ajaxUrl: '{$ajax_url}',
-    selectedBookerId: {$selected_booker|default:0},
-    selectedDate: '{$selected_date|default:""}',
-    minDate: '{$min_date}',
-    maxDate: '{$max_date}',
-    currentStep: 'selection'
-};
-</script>
-{/block}
-
-{block name="page_footer"}
 <style>
-/* Styles spécifiques à cette page */
-.booking-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+.calendar-legend {
+    border-top: 1px solid #dee2e6;
+    padding-top: 20px;
 }
 
-.booking-section {
-    margin-bottom: 40px;
-    padding: 30px;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.bookers-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+.legend-items {
+    display: flex;
+    flex-wrap: wrap;
     gap: 20px;
-    margin-top: 20px;
 }
 
-.booker-card {
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    overflow: hidden;
-    transition: all 0.3s ease;
-    cursor: pointer;
+.legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
 }
 
-.booker-card:hover:not(.unavailable) {
-    border-color: #007cba;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+.legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    margin-right: 8px;
+    border: 1px solid #dee2e6;
 }
 
-.booker-card.unavailable {
-    opacity: 0.6;
-    cursor: not-allowed;
+.legend-color.available {
+    background: rgba(0, 118, 128, 0.1);
+    border-color: var(--booking-primary);
 }
 
-.booker-image {
+.legend-color.selected {
+    background: var(--booking-primary);
+}
+
+.legend-color.has-reservations {
+    background: #fff3cd;
+    border-color: #ffc107;
     position: relative;
-    height: 200px;
-    overflow: hidden;
 }
 
-.booker-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.unavailable-overlay {
+.legend-color.has-reservations::after {
+    content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
+    bottom: 2px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    background: #ffc107;
+    border-radius: 50%;
 }
 
-.booker-info {
-    padding: 20px;
-}
-
-.booker-info h3 {
-    margin-bottom: 10px;
-    color: #333;
-}
-
-.booker-description {
-    color: #666;
-    margin-bottom: 15px;
-    line-height: 1.5;
-}
-
-.booker-price {
-    font-size: 1.2em;
-    margin-bottom: 15px;
-}
-
-.booker-price .price {
-    font-weight: bold;
-    color: #28a745;
-}
-
-.confirmation-section {
-    text-align: center;
-}
-
-.success-icon {
-    font-size: 4em;
-    color: #28a745;
-    margin-bottom: 20px;
-}
-
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255,255,255,0.9);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-}
-
-.loading-content {
-    text-align: center;
+.legend-color.unavailable {
+    background: #f5f5f5;
+    border-color: #ccc;
 }
 
 @media (max-width: 768px) {
-    .bookers-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .booking-container {
-        padding: 10px;
-    }
-    
-    .booking-section {
-        padding: 20px;
+    .legend-items {
+        flex-direction: column;
+        gap: 10px;
     }
 }
 </style>
+
+<script>
+$(document).ready(function() {
+    // Gestion de la sélection du booker
+    $('#booker_selector').on('change', function() {
+        const selectedBooker = $(this).val();
+        
+        // Masquer toutes les infos booker
+        $('.booker-info').hide();
+        
+        if (selectedBooker) {
+            // Afficher les infos du booker sélectionné
+            $('#booker_info_' + selectedBooker).show();
+            
+            // Afficher le container de réservation
+            $('#booking_container').show();
+            
+            // Initialiser le module de réservation
+            if (window.bookingFrontend) {
+                window.bookingFrontend.selectBooker(selectedBooker);
+            }
+        } else {
+            // Masquer le container de réservation
+            $('#booking_container').hide();
+        }
+    });
+    
+    // Déclencher le changement si un booker est pré-sélectionné
+    if ($('#booker_selector').val()) {
+        $('#booker_selector').trigger('change');
+    }
+});
+</script>
 {/block}

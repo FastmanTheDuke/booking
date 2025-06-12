@@ -1,664 +1,525 @@
 /**
- * JavaScript pour l'interface de réservation côté client
+ * Booking Front-end JavaScript
+ * Interface utilisateur pour le système de réservation
  */
-$(document).ready(function() {
-    
-    // Initialisation
-    BookingApp.init();
-    
-    // Configuration des gestionnaires d'événements
-    setupEventHandlers();
-    
-    // Charger l'état initial si des paramètres sont présents
-    if (window.BookingConfig.selectedBookerId) {
-        selectBooker(window.BookingConfig.selectedBookerId);
+
+class BookingFrontend {
+    constructor() {
+        this.selectedDates = [];
+        this.selectedTimeSlots = [];
+        this.currentBooker = null;
+        this.currentMonth = new Date();
+        this.bookerData = {};
+        this.init();
     }
-});
 
-/**
- * Objet principal de l'application de réservation
- */
-window.BookingApp = {
-    selectedBooker: null,
-    selectedDate: null,
-    selectedSlot: null,
-    availableSlots: [],
-    currentPrice: 0,
-    
-    init: function() {
-        this.ajaxUrl = window.BookingConfig.ajaxUrl;
-        this.minDate = window.BookingConfig.minDate;
-        this.maxDate = window.BookingConfig.maxDate;
-        this.currentStep = window.BookingConfig.currentStep || 'selection';
-        
-        // Initialiser les validations
-        this.initFormValidation();
-        
-        // Masquer les sections non nécessaires
-        this.showStep(this.currentStep);
-    },
-    
-    showStep: function(step) {
-        $('.booking-section').hide();
-        
-        switch(step) {
-            case 'selection':
-                $('.booker-selection').show();
-                break;
-            case 'reservation':
-                $('.reservation-form').show();
-                break;
-            case 'confirmation':
-                $('.confirmation-section').show();
-                break;
-        }
-        
-        this.currentStep = step;
-    },
-    
-    initFormValidation: function() {
-        // Validation en temps réel
-        $('#customer-email').on('blur', function() {
-            validateEmail($(this).val(), $(this));
-        });
-        
-        $('#customer-phone').on('blur', function() {
-            validatePhone($(this).val(), $(this));
-        });
-        
-        // Activer/désactiver le bouton de soumission
-        $('#booking-form input, #booking-form select, #booking-form textarea').on('change keyup', function() {
-            updateSubmitButton();
-        });
-        
-        $('#accept-conditions').on('change', function() {
-            updateSubmitButton();
-        });
+    init() {
+        this.bindEvents();
+        this.loadCalendar();
+        this.initTimeSlotSelector();
     }
-};
 
-/**
- * Configuration des gestionnaires d'événements
- */
-function setupEventHandlers() {
-    
-    // Sélection d'un booker
-    $('.select-booker-btn').on('click', function(e) {
-        e.preventDefault();
-        var bookerId = $(this).closest('.booker-card').data('booker-id');
-        selectBooker(bookerId);
-    });
-    
-    // Clic sur une carte booker
-    $('.booker-card:not(.unavailable)').on('click', function(e) {
-        if (!$(e.target).hasClass('select-booker-btn')) {
-            var bookerId = $(this).data('booker-id');
-            selectBooker(bookerId);
-        }
-    });
-    
-    // Retour à la sélection
-    $('.back-to-selection').on('click', function() {
-        BookingApp.showStep('selection');
-        resetForm();
-    });
-    
-    // Changement de date
-    $('#booking-date').on('change', function() {
-        var date = $(this).val();
-        if (date && BookingApp.selectedBooker) {
-            loadAvailableSlots(BookingApp.selectedBooker.id, date);
-        }
-    });
-    
-    // Sélection d'un créneau
-    $('#time-slots').on('change', function() {
-        var slotValue = $(this).val();
-        if (slotValue) {
-            selectTimeSlot(slotValue);
-        } else {
-            clearPriceSummary();
-        }
-    });
-    
-    // Soumission du formulaire
-    $('#booking-form').on('submit', function(e) {
-        e.preventDefault();
-        submitReservation();
-    });
-    
-    // Reset du formulaire
-    $('#reset-form').on('click', function() {
-        resetForm();
-    });
-    
-    // Modal des conditions
-    $('#accept-conditions-btn').on('click', function() {
-        $('#accept-conditions').prop('checked', true);
-        updateSubmitButton();
-    });
-    
-    // Gestion des erreurs AJAX globales
-    $(document).ajaxError(function(event, xhr, settings, thrownError) {
-        hideLoading();
-        if (xhr.responseJSON && xhr.responseJSON.error) {
-            showError(xhr.responseJSON.error);
-        } else {
-            showError('Une erreur est survenue. Veuillez réessayer.');
-        }
-    });
-}
+    bindEvents() {
+        // Navigation du calendrier
+        $(document).on('click', '.booking-nav-prev', () => this.previousMonth());
+        $(document).on('click', '.booking-nav-next', () => this.nextMonth());
+        
+        // Sélection de booker
+        $(document).on('change', '.booker-selector', (e) => this.selectBooker(e.target.value));
+        
+        // Sélection de dates
+        $(document).on('click', '.calendar-day.available', (e) => this.toggleDateSelection(e));
+        
+        // Sélection de créneaux horaires
+        $(document).on('click', '.time-slot.available', (e) => this.toggleTimeSlot(e));
+        
+        // Soumission du formulaire
+        $(document).on('click', '.booking-submit', () => this.submitBooking());
+        
+        // Modal de confirmation
+        $(document).on('click', '.booking-confirm', () => this.confirmBooking());
+        $(document).on('click', '.booking-cancel', () => this.cancelBooking());
+    }
 
-/**
- * Sélectionner un booker
- */
-function selectBooker(bookerId) {
-    showLoading();
-    
-    $.ajax({
-        url: BookingApp.ajaxUrl,
-        type: 'POST',
-        data: {
-            ajax: true,
-            action: 'getBookerInfo',
-            booker_id: bookerId
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                BookingApp.selectedBooker = response.booker;
-                displaySelectedBooker(response.booker);
-                BookingApp.showStep('reservation');
-                
-                // Pré-sélectionner la date si fournie
-                if (window.BookingConfig.selectedDate) {
-                    $('#booking-date').val(window.BookingConfig.selectedDate);
-                    loadAvailableSlots(bookerId, window.BookingConfig.selectedDate);
+    loadCalendar() {
+        const monthStr = this.currentMonth.getFullYear() + '-' + 
+                        String(this.currentMonth.getMonth() + 1).padStart(2, '0');
+        
+        $.ajax({
+            url: bookingAjaxUrl,
+            type: 'POST',
+            data: {
+                action: 'getCalendarData',
+                month: monthStr,
+                id_booker: this.currentBooker
+            },
+            success: (response) => {
+                if (response.success) {
+                    this.renderCalendar(response.data);
+                } else {
+                    this.showError(response.error || 'Erreur lors du chargement du calendrier');
                 }
-            } else {
-                showError(response.error || 'Erreur lors de la sélection');
-            }
-        },
-        complete: function() {
-            hideLoading();
-        }
-    });
-}
-
-/**
- * Afficher les informations du booker sélectionné
- */
-function displaySelectedBooker(booker) {
-    $('#selected-booker-id').val(booker.id);
-    $('#selected-booker-image').attr('src', booker.image_url).attr('alt', booker.name);
-    $('#selected-booker-name').text(booker.name);
-    $('#selected-booker-description').text(booker.description);
-    $('#selected-booker-price').text(booker.base_price.toFixed(2));
-    
-    // Configurer les dates disponibles
-    if (booker.available_days && booker.available_days.length > 0) {
-        // Vous pouvez ici implémenter une logique pour désactiver les dates non disponibles
-        // Pour l'instant, on se contente des attributs min/max
-    }
-}
-
-/**
- * Charger les créneaux disponibles pour une date
- */
-function loadAvailableSlots(bookerId, date) {
-    var $slotsSelect = $('#time-slots');
-    var $slotsLoading = $('#slots-loading');
-    
-    // État de chargement
-    $slotsSelect.prop('disabled', true).html('<option value="">Chargement...</option>');
-    $slotsLoading.show();
-    clearPriceSummary();
-    
-    $.ajax({
-        url: BookingApp.ajaxUrl,
-        type: 'POST',
-        data: {
-            ajax: true,
-            action: 'getAvailableSlots',
-            booker_id: bookerId,
-            date: date
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                BookingApp.availableSlots = response.slots;
-                BookingApp.selectedDate = date;
-                populateTimeSlots(response.slots);
-            } else {
-                $slotsSelect.html('<option value="">Aucun créneau disponible</option>');
-                showError(response.error || 'Aucun créneau disponible pour cette date');
-            }
-        },
-        error: function() {
-            $slotsSelect.html('<option value="">Erreur de chargement</option>');
-        },
-        complete: function() {
-            $slotsLoading.hide();
-        }
-    });
-}
-
-/**
- * Peupler la liste des créneaux horaires
- */
-function populateTimeSlots(slots) {
-    var $slotsSelect = $('#time-slots');
-    
-    if (slots && slots.length > 0) {
-        var options = '<option value="">Choisir un créneau</option>';
-        
-        slots.forEach(function(slot) {
-            var value = slot.hour_from + '-' + slot.hour_to;
-            var label = slot.label + ' (' + slot.price.toFixed(2) + '€)';
-            options += '<option value="' + value + '" data-price="' + slot.price + '" data-duration="' + slot.duration + '">' + label + '</option>';
+            },
+            error: () => this.showError('Erreur de connexion')
         });
+    }
+
+    renderCalendar(data) {
+        const calendar = $('.booking-calendar');
+        calendar.empty();
         
-        $slotsSelect.html(options).prop('disabled', false);
-    } else {
-        $slotsSelect.html('<option value="">Aucun créneau disponible</option>').prop('disabled', true);
+        // En-tête du calendrier
+        const header = this.createCalendarHeader();
+        calendar.append(header);
+        
+        // Grille du calendrier
+        const grid = this.createCalendarGrid(data);
+        calendar.append(grid);
+        
+        // Mettre à jour le sélecteur de créneaux
+        this.updateTimeSlots(data.timeSlots);
     }
-}
 
-/**
- * Sélectionner un créneau horaire
- */
-function selectTimeSlot(slotValue) {
-    var $selectedOption = $('#time-slots option:selected');
-    var price = parseFloat($selectedOption.data('price')) || 0;
-    var duration = parseInt($selectedOption.data('duration')) || 0;
-    
-    BookingApp.selectedSlot = {
-        value: slotValue,
-        price: price,
-        duration: duration
-    };
-    
-    BookingApp.currentPrice = price;
-    
-    // Afficher le résumé des prix
-    showPriceSummary(duration, price);
-    
-    // Mettre à jour le bouton de soumission
-    updateSubmitButton();
-}
-
-/**
- * Afficher le résumé des prix
- */
-function showPriceSummary(duration, price) {
-    $('#booking-duration').text(duration + 'h');
-    $('#booking-total-price').text(price.toFixed(2) + '€');
-    $('#price-summary').show();
-}
-
-/**
- * Masquer le résumé des prix
- */
-function clearPriceSummary() {
-    $('#price-summary').hide();
-    BookingApp.currentPrice = 0;
-    BookingApp.selectedSlot = null;
-    updateSubmitButton();
-}
-
-/**
- * Soumettre la réservation
- */
-function submitReservation() {
-    if (!validateForm()) {
-        return;
+    createCalendarHeader() {
+        const monthNames = [
+            'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+        ];
+        
+        const monthYear = monthNames[this.currentMonth.getMonth()] + ' ' + 
+                         this.currentMonth.getFullYear();
+        
+        return `
+            <div class="calendar-header">
+                <button class="booking-nav-prev" type="button">
+                    <i class="material-icons">chevron_left</i>
+                </button>
+                <h3 class="calendar-title">${monthYear}</h3>
+                <button class="booking-nav-next" type="button">
+                    <i class="material-icons">chevron_right</i>
+                </button>
+            </div>
+            <div class="calendar-weekdays">
+                <div class="weekday">Lun</div>
+                <div class="weekday">Mar</div>
+                <div class="weekday">Mer</div>
+                <div class="weekday">Jeu</div>
+                <div class="weekday">Ven</div>
+                <div class="weekday">Sam</div>
+                <div class="weekday">Dim</div>
+            </div>
+        `;
     }
-    
-    showLoading();
-    
-    var formData = {
-        ajax: true,
-        action: 'createReservation',
-        booker_id: $('#selected-booker-id').val(),
-        date: $('#booking-date').val(),
-        hour_from: BookingApp.selectedSlot.value.split('-')[0],
-        hour_to: BookingApp.selectedSlot.value.split('-')[1],
-        customer_name: $('#customer-name').val(),
-        customer_email: $('#customer-email').val(),
-        customer_phone: $('#customer-phone').val(),
-        notes: $('#customer-notes').val()
-    };
-    
-    $.ajax({
-        url: BookingApp.ajaxUrl,
-        type: 'POST',
-        data: formData,
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                showConfirmation(formData, response.reservation_id);
-            } else {
-                showError(response.error || 'Erreur lors de la réservation');
+
+    createCalendarGrid(data) {
+        const firstDay = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth(), 1);
+        const lastDay = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() + 1, 0);
+        const startDate = new Date(firstDay);
+        startDate.setDate(startDate.getDate() - (firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1));
+        
+        let html = '<div class="calendar-grid">';
+        let currentDate = new Date(startDate);
+        
+        for (let week = 0; week < 6; week++) {
+            html += '<div class="calendar-week">';
+            
+            for (let day = 0; day < 7; day++) {
+                const dateStr = currentDate.toISOString().split('T')[0];
+                const isCurrentMonth = currentDate.getMonth() === this.currentMonth.getMonth();
+                const isToday = this.isToday(currentDate);
+                const isSelected = this.selectedDates.includes(dateStr);
+                const availability = data.availabilities[dateStr] || {};
+                const isAvailable = availability.available && isCurrentMonth;
+                const isPast = currentDate < new Date().setHours(0,0,0,0);
+                
+                let dayClass = 'calendar-day';
+                if (!isCurrentMonth) dayClass += ' other-month';
+                if (isToday) dayClass += ' today';
+                if (isSelected) dayClass += ' selected';
+                if (isAvailable && !isPast) dayClass += ' available';
+                if (isPast) dayClass += ' past';
+                if (availability.hasReservations) dayClass += ' has-reservations';
+                
+                html += `
+                    <div class="${dayClass}" data-date="${dateStr}">
+                        <span class="day-number">${currentDate.getDate()}</span>
+                        ${availability.slotsCount ? `<span class="slots-count">${availability.slotsCount} créneaux</span>` : ''}
+                    </div>
+                `;
+                
+                currentDate.setDate(currentDate.getDate() + 1);
             }
-        },
-        complete: function() {
-            hideLoading();
+            
+            html += '</div>';
+            
+            if (currentDate.getMonth() !== this.currentMonth.getMonth()) break;
         }
-    });
-}
-
-/**
- * Afficher la confirmation
- */
-function showConfirmation(formData, reservationId) {
-    // Remplir le récapitulatif
-    var summaryHtml = '<div class="summary-item"><strong>Élément:</strong> ' + BookingApp.selectedBooker.name + '</div>';
-    summaryHtml += '<div class="summary-item"><strong>Date:</strong> ' + formatDate(formData.date) + '</div>';
-    summaryHtml += '<div class="summary-item"><strong>Horaire:</strong> ' + formData.hour_from + 'h00 - ' + formData.hour_to + 'h00</div>';
-    summaryHtml += '<div class="summary-item"><strong>Durée:</strong> ' + BookingApp.selectedSlot.duration + 'h</div>';
-    summaryHtml += '<div class="summary-item"><strong>Prix:</strong> ' + BookingApp.currentPrice.toFixed(2) + '€</div>';
-    summaryHtml += '<div class="summary-item"><strong>Client:</strong> ' + formData.customer_name + '</div>';
-    summaryHtml += '<div class="summary-item"><strong>Email:</strong> ' + formData.customer_email + '</div>';
-    if (formData.customer_phone) {
-        summaryHtml += '<div class="summary-item"><strong>Téléphone:</strong> ' + formData.customer_phone + '</div>';
+        
+        html += '</div>';
+        return html;
     }
-    if (formData.notes) {
-        summaryHtml += '<div class="summary-item"><strong>Notes:</strong> ' + formData.notes + '</div>';
+
+    updateTimeSlots(timeSlots) {
+        const container = $('.time-slots-container');
+        container.empty();
+        
+        if (!timeSlots || timeSlots.length === 0) {
+            container.html('<p class="no-slots">Sélectionnez une date pour voir les créneaux disponibles</p>');
+            return;
+        }
+        
+        let html = '<div class="time-slots-grid">';
+        timeSlots.forEach(slot => {
+            const isSelected = this.selectedTimeSlots.some(s => 
+                s.date === slot.date && s.hour_from === slot.hour_from
+            );
+            const isAvailable = slot.available && !slot.reserved;
+            
+            let slotClass = 'time-slot';
+            if (isSelected) slotClass += ' selected';
+            if (isAvailable) slotClass += ' available';
+            if (slot.reserved) slotClass += ' reserved';
+            
+            html += `
+                <div class="${slotClass}" 
+                     data-date="${slot.date}" 
+                     data-hour-from="${slot.hour_from}" 
+                     data-hour-to="${slot.hour_to}">
+                    <span class="slot-time">${this.formatTime(slot.hour_from)} - ${this.formatTime(slot.hour_to)}</span>
+                    ${slot.price ? `<span class="slot-price">${slot.price}€</span>` : ''}
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        container.html(html);
     }
-    summaryHtml += '<div class="summary-item"><strong>Numéro de réservation:</strong> #' + reservationId + '</div>';
-    
-    $('.summary-details').html(summaryHtml);
-    
-    // Afficher la section de confirmation
-    BookingApp.showStep('confirmation');
-    
-    // Faire défiler vers le haut
-    $('html, body').animate({
-        scrollTop: $('.confirmation-section').offset().top - 50
-    }, 500);
-}
 
-/**
- * Valider le formulaire
- */
-function validateForm() {
-    var errors = [];
-    
-    // Vérifications de base
-    if (!BookingApp.selectedBooker) {
-        errors.push('Aucun élément sélectionné');
+    toggleDateSelection(event) {
+        const date = $(event.currentTarget).data('date');
+        const dateIndex = this.selectedDates.indexOf(date);
+        
+        if (dateIndex === -1) {
+            // Mode sélection multiple ou simple selon configuration
+            if (!this.isMultiSelectEnabled()) {
+                this.selectedDates = [date];
+            } else {
+                this.selectedDates.push(date);
+            }
+        } else {
+            this.selectedDates.splice(dateIndex, 1);
+        }
+        
+        this.updateCalendarSelection();
+        this.loadTimeSlotsForSelectedDates();
+        this.updateBookingSummary();
     }
-    
-    if (!$('#booking-date').val()) {
-        errors.push('Veuillez sélectionner une date');
-    }
-    
-    if (!$('#time-slots').val()) {
-        errors.push('Veuillez sélectionner un créneau');
-    }
-    
-    if (!$('#customer-name').val().trim()) {
-        errors.push('Le nom est obligatoire');
-    }
-    
-    if (!$('#customer-email').val().trim()) {
-        errors.push('L\'email est obligatoire');
-    } else if (!isValidEmail($('#customer-email').val())) {
-        errors.push('Email invalide');
-    }
-    
-    var phone = $('#customer-phone').val().trim();
-    if (phone && !isValidPhone(phone)) {
-        errors.push('Numéro de téléphone invalide');
-    }
-    
-    if (!$('#accept-conditions').is(':checked')) {
-        errors.push('Vous devez accepter les conditions de réservation');
-    }
-    
-    // Afficher les erreurs
-    if (errors.length > 0) {
-        showError(errors.join('<br>'));
-        return false;
-    }
-    
-    return true;
-}
 
-/**
- * Mettre à jour l'état du bouton de soumission
- */
-function updateSubmitButton() {
-    var $submitBtn = $('#submit-booking');
-    var isValid = true;
-    
-    // Vérifications minimales
-    if (!BookingApp.selectedBooker || 
-        !$('#booking-date').val() || 
-        !$('#time-slots').val() ||
-        !$('#customer-name').val().trim() ||
-        !$('#customer-email').val().trim() ||
-        !$('#accept-conditions').is(':checked')) {
-        isValid = false;
-    }
-    
-    $submitBtn.prop('disabled', !isValid);
-    
-    if (isValid) {
-        $submitBtn.removeClass('btn-secondary').addClass('btn-primary');
-    } else {
-        $submitBtn.removeClass('btn-primary').addClass('btn-secondary');
-    }
-}
-
-/**
- * Réinitialiser le formulaire
- */
-function resetForm() {
-    $('#booking-form')[0].reset();
-    $('#time-slots').html('<option value="">Choisir d\'abord une date</option>').prop('disabled', true);
-    clearPriceSummary();
-    BookingApp.selectedDate = null;
-    BookingApp.selectedSlot = null;
-    BookingApp.currentPrice = 0;
-    updateSubmitButton();
-    hideAllMessages();
-}
-
-/**
- * Fonctions de validation
- */
-function validateEmail(email, $field) {
-    if (email && !isValidEmail(email)) {
-        showFieldError($field, 'Email invalide');
-        return false;
-    } else {
-        clearFieldError($field);
-        return true;
-    }
-}
-
-function validatePhone(phone, $field) {
-    if (phone && !isValidPhone(phone)) {
-        showFieldError($field, 'Numéro invalide');
-        return false;
-    } else {
-        clearFieldError($field);
-        return true;
-    }
-}
-
-function isValidEmail(email) {
-    var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-}
-
-function isValidPhone(phone) {
-    var re = /^[\d\s\-\+\(\)\.]{10,}$/;
-    return re.test(phone.replace(/\s/g, ''));
-}
-
-/**
- * Gestion des messages d'erreur sur les champs
- */
-function showFieldError($field, message) {
-    clearFieldError($field);
-    $field.addClass('is-invalid');
-    $field.after('<div class="invalid-feedback">' + message + '</div>');
-}
-
-function clearFieldError($field) {
-    $field.removeClass('is-invalid');
-    $field.siblings('.invalid-feedback').remove();
-}
-
-/**
- * Gestion des messages globaux
- */
-function showError(message) {
-    hideAllMessages();
-    
-    var alertHtml = '<div class="alert alert-danger alert-dismissible fade show booking-alert" role="alert">' +
-                   '<i class="fas fa-exclamation-circle"></i> ' + message +
-                   '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
-                   '<span aria-hidden="true">&times;</span>' +
-                   '</button>' +
-                   '</div>';
-    
-    $('.booking-container').prepend(alertHtml);
-    
-    // Faire défiler vers le haut
-    $('html, body').animate({
-        scrollTop: $('.booking-alert').offset().top - 20
-    }, 300);
-    
-    // Auto-hide après 10 secondes
-    setTimeout(function() {
-        $('.booking-alert').alert('close');
-    }, 10000);
-}
-
-function showSuccess(message) {
-    hideAllMessages();
-    
-    var alertHtml = '<div class="alert alert-success alert-dismissible fade show booking-alert" role="alert">' +
-                   '<i class="fas fa-check-circle"></i> ' + message +
-                   '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
-                   '<span aria-hidden="true">&times;</span>' +
-                   '</button>' +
-                   '</div>';
-    
-    $('.booking-container').prepend(alertHtml);
-    
-    // Auto-hide après 5 secondes
-    setTimeout(function() {
-        $('.booking-alert').alert('close');
-    }, 5000);
-}
-
-function hideAllMessages() {
-    $('.booking-alert').remove();
-}
-
-/**
- * Gestion du loading
- */
-function showLoading(message) {
-    var loadingMessage = message || 'Traitement en cours...';
-    $('#loading-overlay p').text(loadingMessage);
-    $('#loading-overlay').show();
-}
-
-function hideLoading() {
-    $('#loading-overlay').hide();
-}
-
-/**
- * Fonctions utilitaires
- */
-function formatDate(dateStr) {
-    var date = new Date(dateStr);
-    var options = { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        weekday: 'long'
-    };
-    return date.toLocaleDateString('fr-FR', options);
-}
-
-function formatPrice(price) {
-    return parseFloat(price).toFixed(2) + '€';
-}
-
-function formatTime(hour) {
-    return String(hour).padStart(2, '0') + ':00';
-}
-
-// Gestion des erreurs JavaScript globales
-window.addEventListener('error', function(e) {
-    console.error('Erreur JavaScript:', e.error);
-    // Ne pas afficher d'erreur à l'utilisateur pour les erreurs JS non critiques
-});
-
-// Auto-save des données du formulaire dans le localStorage
-function saveFormData() {
-    if (typeof(Storage) !== "undefined") {
-        var formData = {
-            booker_id: $('#selected-booker-id').val(),
-            date: $('#booking-date').val(),
-            time_slot: $('#time-slots').val(),
-            customer_name: $('#customer-name').val(),
-            customer_email: $('#customer-email').val(),
-            customer_phone: $('#customer-phone').val(),
-            notes: $('#customer-notes').val(),
-            timestamp: Date.now()
+    toggleTimeSlot(event) {
+        const $slot = $(event.currentTarget);
+        const slotData = {
+            date: $slot.data('date'),
+            hour_from: $slot.data('hour-from'),
+            hour_to: $slot.data('hour-to')
         };
         
-        localStorage.setItem('booking_form_data', JSON.stringify(formData));
+        const slotIndex = this.selectedTimeSlots.findIndex(s => 
+            s.date === slotData.date && s.hour_from === slotData.hour_from
+        );
+        
+        if (slotIndex === -1) {
+            this.selectedTimeSlots.push(slotData);
+        } else {
+            this.selectedTimeSlots.splice(slotIndex, 1);
+        }
+        
+        this.updateTimeSlotsSelection();
+        this.updateBookingSummary();
     }
-}
 
-function loadFormData() {
-    if (typeof(Storage) !== "undefined") {
-        var savedData = localStorage.getItem('booking_form_data');
-        if (savedData) {
-            try {
-                var formData = JSON.parse(savedData);
-                
-                // Vérifier que les données ne sont pas trop anciennes (1 heure max)
-                if (Date.now() - formData.timestamp < 3600000) {
-                    // Restaurer les données non sensibles
-                    if (formData.customer_name) $('#customer-name').val(formData.customer_name);
-                    if (formData.customer_email) $('#customer-email').val(formData.customer_email);
-                    if (formData.customer_phone) $('#customer-phone').val(formData.customer_phone);
+    loadTimeSlotsForSelectedDates() {
+        if (this.selectedDates.length === 0) {
+            this.updateTimeSlots([]);
+            return;
+        }
+        
+        $.ajax({
+            url: bookingAjaxUrl,
+            type: 'POST',
+            data: {
+                action: 'getTimeSlots',
+                dates: this.selectedDates,
+                id_booker: this.currentBooker
+            },
+            success: (response) => {
+                if (response.success) {
+                    this.updateTimeSlots(response.timeSlots);
+                } else {
+                    this.showError(response.error || 'Erreur lors du chargement des créneaux');
                 }
-            } catch (e) {
-                // Ignorer les erreurs de parsing
+            },
+            error: () => this.showError('Erreur de connexion')
+        });
+    }
+
+    updateCalendarSelection() {
+        $('.calendar-day').removeClass('selected');
+        this.selectedDates.forEach(date => {
+            $(`.calendar-day[data-date="${date}"]`).addClass('selected');
+        });
+    }
+
+    updateTimeSlotsSelection() {
+        $('.time-slot').removeClass('selected');
+        this.selectedTimeSlots.forEach(slot => {
+            $(`.time-slot[data-date="${slot.date}"][data-hour-from="${slot.hour_from}"]`).addClass('selected');
+        });
+    }
+
+    updateBookingSummary() {
+        const summary = $('.booking-summary');
+        
+        if (this.selectedTimeSlots.length === 0) {
+            summary.html('<p>Aucune réservation sélectionnée</p>');
+            $('.booking-submit').prop('disabled', true);
+            return;
+        }
+        
+        let totalPrice = 0;
+        let html = '<div class="summary-items">';
+        
+        this.selectedTimeSlots.forEach(slot => {
+            const price = this.getSlotPrice(slot);
+            totalPrice += price;
+            
+            html += `
+                <div class="summary-item">
+                    <span class="item-date">${this.formatDate(slot.date)}</span>
+                    <span class="item-time">${this.formatTime(slot.hour_from)} - ${this.formatTime(slot.hour_to)}</span>
+                    <span class="item-price">${price}€</span>
+                </div>
+            `;
+        });
+        
+        html += `
+            </div>
+            <div class="summary-total">
+                <strong>Total: ${totalPrice}€</strong>
+            </div>
+        `;
+        
+        summary.html(html);
+        $('.booking-submit').prop('disabled', false);
+    }
+
+    submitBooking() {
+        if (this.selectedTimeSlots.length === 0) {
+            this.showError('Veuillez sélectionner au moins un créneau');
+            return;
+        }
+        
+        // Collecter les informations client
+        const customerInfo = this.collectCustomerInfo();
+        if (!this.validateCustomerInfo(customerInfo)) {
+            return;
+        }
+        
+        // Afficher la modal de confirmation
+        this.showConfirmationModal(customerInfo);
+    }
+
+    collectCustomerInfo() {
+        return {
+            firstname: $('#booking_firstname').val(),
+            lastname: $('#booking_lastname').val(),
+            email: $('#booking_email').val(),
+            phone: $('#booking_phone').val(),
+            message: $('#booking_message').val()
+        };
+    }
+
+    validateCustomerInfo(info) {
+        if (!info.firstname || !info.lastname || !info.email) {
+            this.showError('Veuillez remplir tous les champs obligatoires');
+            return false;
+        }
+        
+        if (!this.isValidEmail(info.email)) {
+            this.showError('Veuillez saisir un email valide');
+            return false;
+        }
+        
+        return true;
+    }
+
+    showConfirmationModal(customerInfo) {
+        const modal = $('#booking-confirmation-modal');
+        
+        // Remplir les détails de la modal
+        $('.modal-customer-name').text(`${customerInfo.firstname} ${customerInfo.lastname}`);
+        $('.modal-customer-email').text(customerInfo.email);
+        $('.modal-booking-details').html(this.generateBookingDetailsHTML());
+        
+        modal.modal('show');
+    }
+
+    confirmBooking() {
+        const customerInfo = this.collectCustomerInfo();
+        
+        $('.booking-confirm').prop('disabled', true).text('Envoi en cours...');
+        
+        $.ajax({
+            url: bookingAjaxUrl,
+            type: 'POST',
+            data: {
+                action: 'createBooking',
+                id_booker: this.currentBooker,
+                time_slots: this.selectedTimeSlots,
+                customer: customerInfo
+            },
+            success: (response) => {
+                if (response.success) {
+                    this.showSuccess('Votre demande de réservation a été envoyée avec succès !');
+                    $('#booking-confirmation-modal').modal('hide');
+                    this.resetForm();
+                    
+                    // Redirection vers page de paiement si nécessaire
+                    if (response.payment_url) {
+                        setTimeout(() => {
+                            window.location.href = response.payment_url;
+                        }, 2000);
+                    }
+                } else {
+                    this.showError(response.error || 'Erreur lors de la création de la réservation');
+                }
+            },
+            error: () => {
+                this.showError('Erreur de connexion');
+            },
+            complete: () => {
+                $('.booking-confirm').prop('disabled', false).text('Confirmer la réservation');
             }
+        });
+    }
+
+    cancelBooking() {
+        $('#booking-confirmation-modal').modal('hide');
+    }
+
+    resetForm() {
+        this.selectedDates = [];
+        this.selectedTimeSlots = [];
+        $('#booking-form')[0].reset();
+        this.updateCalendarSelection();
+        this.updateTimeSlotsSelection();
+        this.updateBookingSummary();
+        this.loadCalendar();
+    }
+
+    // Méthodes utilitaires
+    previousMonth() {
+        this.currentMonth.setMonth(this.currentMonth.getMonth() - 1);
+        this.loadCalendar();
+    }
+
+    nextMonth() {
+        this.currentMonth.setMonth(this.currentMonth.getMonth() + 1);
+        this.loadCalendar();
+    }
+
+    selectBooker(bookerId) {
+        this.currentBooker = bookerId;
+        this.resetForm();
+    }
+
+    isToday(date) {
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
+    }
+
+    isMultiSelectEnabled() {
+        return $('#booking-form').data('multi-select') === true;
+    }
+
+    formatTime(hour) {
+        return hour.toString().padStart(2, '0') + ':00';
+    }
+
+    formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('fr-FR', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+
+    getSlotPrice(slot) {
+        // À implémenter selon votre logique de prix
+        return this.bookerData.price || 50;
+    }
+
+    generateBookingDetailsHTML() {
+        let html = '<div class="booking-details">';
+        
+        this.selectedTimeSlots.forEach(slot => {
+            html += `
+                <div class="detail-item">
+                    <i class="material-icons">event</i>
+                    <span>${this.formatDate(slot.date)} de ${this.formatTime(slot.hour_from)} à ${this.formatTime(slot.hour_to)}</span>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        return html;
+    }
+
+    isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    showError(message) {
+        this.showNotification(message, 'error');
+    }
+
+    showSuccess(message) {
+        this.showNotification(message, 'success');
+    }
+
+    showNotification(message, type = 'info') {
+        const notification = $(`
+            <div class="booking-notification ${type}">
+                <span class="notification-message">${message}</span>
+                <button class="notification-close">&times;</button>
+            </div>
+        `);
+        
+        $('body').append(notification);
+        
+        setTimeout(() => {
+            notification.addClass('show');
+        }, 100);
+        
+        notification.find('.notification-close').on('click', () => {
+            notification.removeClass('show');
+            setTimeout(() => notification.remove(), 300);
+        });
+        
+        if (type === 'success') {
+            setTimeout(() => {
+                notification.removeClass('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 5000);
         }
     }
 }
 
-function clearSavedFormData() {
-    if (typeof(Storage) !== "undefined") {
-        localStorage.removeItem('booking_form_data');
+// Initialisation
+$(document).ready(() => {
+    if ($('.booking-interface').length) {
+        window.bookingFrontend = new BookingFrontend();
     }
-}
-
-// Sauvegarder automatiquement les données du formulaire
-$(document).on('change keyup', '#booking-form input, #booking-form textarea', function() {
-    // Debounce pour éviter trop d'appels
-    clearTimeout(window.saveFormTimeout);
-    window.saveFormTimeout = setTimeout(saveFormData, 1000);
-});
-
-// Charger les données sauvegardées au chargement de la page
-$(document).ready(function() {
-    loadFormData();
-});
-
-// Nettoyer les données sauvegardées lors de la soumission réussie
-$(document).on('booking-success', function() {
-    clearSavedFormData();
 });
